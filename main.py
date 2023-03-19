@@ -1,6 +1,7 @@
-from flask import Flask, render_template, redirect, url_for, flash, abort
+from flask import Flask, render_template, redirect, url_for, flash, abort, request
 from flask_bootstrap import Bootstrap
 from flask_ckeditor import CKEditor
+from flask_wtf.csrf import CSRFProtect
 from datetime import date
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -10,10 +11,17 @@ from flask_login import UserMixin, login_user, LoginManager, current_user, logou
 from forms import LoginForm, RegisterForm, CreatePostForm, CommentForm
 from flask_gravatar import Gravatar
 import os
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import smtplib
+
+EMAIL = os.environ.get("YOUR_EMAIL")
+PASSWORD = os.environ.get("YOUR_PASSWORD")
+SMTP_PROVIDER = os.environ.get("YOUR_SMTP_PROVIDER")
 
 app = Flask(__name__)
-# app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")  #Create your app app SECRET_KEY
-app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")  #Create your own app SECRET_KEY
+csrf = CSRFProtect(app)
 ckeditor = CKEditor(app)
 Bootstrap(app)
 gravatar = Gravatar(app, size=100, rating='g', default='retro', force_default=False, force_lower=False, use_ssl=False, base_url=None)
@@ -164,11 +172,6 @@ def about():
     return render_template("about.html", current_user=current_user)
 
 
-@app.route("/contact")
-def contact():
-    return render_template("contact.html", current_user=current_user)
-
-
 @app.route("/new-post", methods=["GET", "POST"])
 @admin_only
 def add_new_post():
@@ -187,8 +190,6 @@ def add_new_post():
         return redirect(url_for("get_all_posts"))
 
     return render_template("make-post.html", form=form, current_user=current_user)
-
-
 
 
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
@@ -220,6 +221,31 @@ def delete_post(post_id):
     db.session.delete(post_to_delete)
     db.session.commit()
     return redirect(url_for('get_all_posts'))
+
+
+@app.route("/contact", methods=["GET","POST"])
+def contact():
+    if request.method == "POST":
+        send_email(request.form['name'], request.form['email'],request.form['phone'],request.form['message'])
+        return render_template("contact.html", current_user=current_user, msg_sent=True)
+    return render_template("contact.html", current_user=current_user, msg_sent=False)
+
+def send_email(name, email, phone, message):
+    # Create a new SMTP object
+    smtp_server = smtplib.SMTP(SMTP_PROVIDER, 587)
+    smtp_server.starttls()
+    smtp_server.login(EMAIL, PASSWORD)
+    # Create the message
+    msg = MIMEMultipart()
+    msg['From'] = EMAIL
+    msg['To'] = EMAIL
+    msg['Subject'] = 'New Contact Form The Blog'
+    body = f"Name: {name}\nEmail: {email}\nPhone: {phone}\nMessage: {message}"
+    msg.attach(MIMEText(body, 'plain'))
+    # Send the message
+    smtp_server.send_message(msg)
+    # Close the SMTP connection
+    smtp_server.quit()
 
 
 if __name__ == "__main__":
